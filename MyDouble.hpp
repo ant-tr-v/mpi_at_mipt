@@ -19,6 +19,8 @@ class MyDouble {
   //positive only
   //subtraction is not implemented
   //normalised double as an argument only
+
+  //less then 2^31 exponent (numbers less then 1e646456993)
   int32_t exp = 0;
   std::vector<uint32_t> signif;
   static const uint64_t exp_mask =    static_cast<const uint64_t>(0x7FF0000000000000LL);
@@ -33,13 +35,16 @@ class MyDouble {
 
   void for_bit(const std::function<void (int, size_t)> &func);
 
+  void shift_right(uint64_t shift, bool add_one = true);
+
 public:
+
   MyDouble(){
-    signif.resize((std::max((pers + 31)/32, static_cast<uint64_t>(2))+ 1) / 2, 0);
+    signif.resize(std::max((pers + 31)/32, static_cast<uint64_t>(2)), 0);
   };
 
   explicit MyDouble(double x){
-    signif.resize((std::max((pers + 31)/32, static_cast<uint64_t>(2)) + 1) / 2, 0);
+    signif.resize(std::max((pers + 31)/32, static_cast<uint64_t>(2)), 0);
     auto p = reinterpret_cast<uint64_t *>(&x);
     exp = static_cast<int32_t>(((*p & exp_mask) >> frac_bits) - normalcoef);
     uint64_t significant = (*p & signif_mask) << exp_bits;
@@ -51,6 +56,8 @@ public:
     return stream << n.exp;
   }
 
+  MyDouble operator + (MyDouble &val);
+
   std::string bin();
   std::string dec();
 };
@@ -61,16 +68,11 @@ std::string MyDouble<pers>::bin() {
   auto res = std::string();
   res.resize(pers + 2);
   res[0] ='1', res[1] = '.';
-  bool is_zero = true;
-  auto f = [&is_zero, &res](int x, size_t ind) mutable {
+  auto f = [&res](int x, size_t ind) mutable {
     res[ind + 2] = static_cast<char>('0' + x);
-    if(x)
-      is_zero = false;
   };
   for_bit(f);
   res += " * 2^(" + std::to_string(exp)+")";
-  if(is_zero)
-    return "0";
   return res;
 }
 
@@ -80,12 +82,19 @@ std::string MyDouble<pers>::dec() {
   std::vector <uint32_t> integ{0};
   std::vector <uint32_t> fract{1};
   auto pow = exp;
-  for(int i = 0; pow < i; --i){
-    dec_mul(five, 5);
+  for(int i = 0; pow < i - 1; --i){
     dec_mul(fract, 10);
+    dec_mul(five, 5);
   }
-  if(pow > 0)
+
+  if(pow >= 0) {
     integ[0] = 1;
+  } else {
+    dec_mul(fract, 10);
+    dec_add(fract, five);
+    dec_mul(five, 5);
+  }
+
   for_bit([&] (int b, size_t ind)mutable{
     if(pow > 0) {
       //computing integer part
@@ -189,6 +198,58 @@ void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) {
   }
   for(int j = 0; j < left; ++j){
     func((signif[i]  & (1ULL << (31 - j))) != 0, i * 32 + j);
+  }
+}
+
+template<uint64_t pers>
+MyDouble<pers> MyDouble<pers>::operator+(MyDouble &val) {
+  MyDouble<pers> res;
+  std::reference_wrapper<MyDouble<pers>> a = *this, b = val;
+  if(b.get().exp > a.get().exp)
+    std::swap(a, b);
+  int32_t shift = a.get().exp - b.get().exp;
+
+  res.signif = b.get().signif;
+  res.exp = a.get().exp;
+  if(shift != 0){
+    //aligning
+    res.shift_right(static_cast<uint64_t>(shift));
+  }
+  uint64_t carry = 0;
+  for(long i =  res.signif.size() - 1; i >= 0; --i){
+    uint64_t t = carry + a.get().signif[i] + res.signif[i];
+    res.signif[i] = static_cast<uint32_t>(t);
+    carry = t >> 32;
+  }
+  if (carry || shift == 0){
+    res.exp++;
+    //if both occur add 0.1
+    res.shift_right(1, (shift == 0) && carry);
+  }
+  return res;
+}
+
+template<uint64_t pers>
+void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
+  if(shift == 0)
+    return;
+  auto small = shift % 32;
+  auto big = shift / 32;
+  auto s = signif.size();
+  if(big >= signif.size()) {
+    signif = std::vector<uint32_t>(s, 0);
+    return;
+  }
+  int64_t i;
+  for(i = s - 1; i >= static_cast<int64_t>(big); --i){
+    signif[i] = (signif[i - big] >> small);
+    if(i - big  > 0)
+      signif[i] += (signif[i - big - 1] << (32 - small));
+  }
+  if(add_one)
+    signif[big] += 1 << (32 - small);
+  for(; i >= 0; --i){
+    signif[i] = 0;
   }
 }
 
