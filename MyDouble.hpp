@@ -23,7 +23,6 @@ class MyDouble {
   std::vector<uint32_t> signif;
   static const uint64_t exp_mask =    static_cast<const uint64_t>(0x7FF0000000000000LL);
   static const uint64_t signif_mask = static_cast<const uint64_t>(0x000FFFFFFFFFFFFFLL);
-  static const uint64_t low_mask =    static_cast<const uint64_t>(0x00000000FFFFFFFFLL);
   static const int64_t frac_bits = 52;
   static const int64_t exp_bits = 12;
   static const uint64_t normalcoef = 0x7FF/2;
@@ -50,10 +49,6 @@ public:
 
   friend std::ostream& operator << (std::ostream& stream, MyDouble n){
     return stream << n.exp;
-  }
-
-  int64_t ilog2(){
-    return exp;
   }
 
   std::string bin();
@@ -122,7 +117,7 @@ std::string MyDouble<pers>::dec() {
   res += stream.str();
   stream.str(std::string());
 
-  //converting 
+  //converting fractional part
   p = fract.data() + fract.size() - 1;
   stream << *p;
   for(--p ;p >= fract.data(); --p){
@@ -133,11 +128,12 @@ std::string MyDouble<pers>::dec() {
   std::string frstr = stream.str();
   frstr[0] = '.';
 
-  auto digits = static_cast<unsigned long>(log10l(2) * pers) + 1;
+  auto digits = static_cast<unsigned long>(log10l(2) * pers) + 2;
   if(digits <= res.size()) {
     if(digits < res.size()){
+      auto len = res.size() - digits;
       res.resize(digits);
-      res += "e" + std::to_string(res.size() - digits);
+      res += "e" + std::to_string(len);
     }
     return res;
   }
@@ -166,7 +162,6 @@ template<uint64_t pers>
 void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
                              const std::vector<uint32_t> &b) {
   uint32_t carr = 0;
-  //std::cout << a[0] << " + " << b[0] << std::endl;
   if(a.size() < b.size()) {
     a.resize(b.size());
   }
@@ -181,7 +176,6 @@ void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
   }
   if(carr)
     a.push_back(carr);
-  //std::cout <<"->"<< a[0] << std::endl;
 }
 
 template<uint64_t pers>

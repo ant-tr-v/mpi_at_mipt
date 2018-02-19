@@ -5,7 +5,7 @@
 
 int main(int argc, char *argv[]) {
   MPI::Init(argc, argv);
-  MyDouble<8> x(125.00000198309412377777777);
+  MyDouble<52> x(125.198309412377777777);
   std::cout << x.bin() <<"\t" << x.dec();
   MPI::Finalize();
   return 0;
