@@ -39,6 +39,8 @@ class MyDouble {
 
 public:
 
+  static MyDouble normalize(uint64_t x, int32_t exp = 0);
+
   MyDouble(){
     signif.resize(std::max((pers + 31)/32, static_cast<uint64_t>(2)), 0);
   };
@@ -57,6 +59,12 @@ public:
   }
 
   MyDouble operator + (MyDouble &val);
+
+  void operator += (MyDouble &val);
+
+  MyDouble operator * (MyDouble &val);
+
+  void operator *= (MyDouble &val);
 
   std::string bin();
   std::string dec();
@@ -157,7 +165,7 @@ void MyDouble<pers>::dec_mul(std::vector<uint32_t> &num, uint32_t v) {
   //v must be < 10**9
   std::vector<uint32_t> res(num.size(), 0);
   uint32_t carr = 0;
-  for(auto i = 0; i < num.size(); ++i){
+  for(uint i = 0; i < num.size(); ++i){
     uint64_t t = 1ull* v * num[i] + carr;
     carr = static_cast<uint32_t>(t / 1000000000);
     res[i] = static_cast<uint32_t>(t % 1000000000);
@@ -174,7 +182,7 @@ void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
   if(a.size() < b.size()) {
     a.resize(b.size());
   }
-  for(auto i = 0; i < a.size(); ++i){
+  for(uint i = 0; i < a.size(); ++i){
     uint64_t t;
     if(i < b.size())
        t = a[i]  + b[i] + carr;
@@ -192,12 +200,44 @@ void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) {
   uint64_t left = pers;
   uint64_t i = 0;
   for (i = 0; i < pers / 32; ++i, left -= 32){
-    for(int j = 0; j < 32; ++j){
+    for(uint j = 0; j < 32; ++j){
       func((signif[i]  & (1ULL << (31 - j))) != 0, i * 32 + j);
     }
   }
-  for(int j = 0; j < left; ++j){
+  for(uint j = 0; j < left; ++j){
     func((signif[i]  & (1ULL << (31 - j))) != 0, i * 32 + j);
+  }
+}
+
+template<uint64_t pers>
+void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
+  if(shift == 0)
+    return;
+  int64_t small = shift % 32;
+  int64_t big = shift / 32;
+  int64_t s = signif.size();
+  if(big >= static_cast<int64_t>(signif.size())) {
+    signif = std::vector<uint32_t>(static_cast<unsigned long>(s), 0);
+    return;
+  }
+  int64_t i;
+  if (small == 0){
+    for(i = s - 1; i >= static_cast<int64_t>(big); --i){
+      signif[i] = signif[i - big];
+    }
+    signif[big - 1] = 1;
+    --i;
+  }else{
+    for(i = s - 1; i >= static_cast<int64_t>(big); --i){
+      signif[i] = (signif[i - big] >> small);
+      if(i - big  > 0)
+        signif[i] += (signif[i - big - 1] << (32ll - small));
+    }
+    if(add_one)
+      signif[big] += 1 << (32 - small);
+  }
+  for(; i >= 0; --i){
+    signif[i] = 0;
   }
 }
 
@@ -219,7 +259,7 @@ MyDouble<pers> MyDouble<pers>::operator+(MyDouble &val) {
   for(long i =  res.signif.size() - 1; i >= 0; --i){
     uint64_t t = carry + a.get().signif[i] + res.signif[i];
     res.signif[i] = static_cast<uint32_t>(t);
-    carry = t >> 32;
+    carry = t >> 32ull;
   }
   if (carry || shift == 0){
     res.exp++;
@@ -230,28 +270,57 @@ MyDouble<pers> MyDouble<pers>::operator+(MyDouble &val) {
 }
 
 template<uint64_t pers>
-void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
-  if(shift == 0)
-    return;
-  auto small = shift % 32;
-  auto big = shift / 32;
-  auto s = signif.size();
-  if(big >= signif.size()) {
-    signif = std::vector<uint32_t>(s, 0);
-    return;
-  }
-  int64_t i;
-  for(i = s - 1; i >= static_cast<int64_t>(big); --i){
-    signif[i] = (signif[i - big] >> small);
-    if(i - big  > 0)
-      signif[i] += (signif[i - big - 1] << (32 - small));
-  }
-  if(add_one)
-    signif[big] += 1 << (32 - small);
-  for(; i >= 0; --i){
-    signif[i] = 0;
-  }
+void MyDouble<pers>::operator+=(MyDouble &val) {
+  *this  = *this + val;
 }
 
+template<uint64_t pers>
+MyDouble<pers> MyDouble<pers>::operator*(MyDouble &val) {
+  MyDouble<pers> res = *this;
+  res.exp = exp + val.exp;
+  auto e = res.exp;
+  for(auto i = static_cast<int>(val.signif.size() - 1); i >= 0; --i) {
+    if(val.signif[i] == 0)
+      continue;
+    MyDouble<pers> s1 = normalize(val.signif[i], -32 *(i + 1) + e); //part sum = a[i]* b
+    //std::cout <<"------" << i << " " << s1.dec() << "\n";
+    for(auto j = static_cast<int>(signif.size() - 1); j >= 0; --j) {
+      uint64_t r = 1ull * val.signif[i] * signif[j];
+      if(r == 0)
+        continue;
+      auto t = normalize(r, -32*(i + j + 2) + e);
+      s1 += t;
+    }
+    res += s1;
+  }
+  return res;
+}
+
+template<uint64_t pers>
+void MyDouble<pers>::operator*=(MyDouble &val) {
+  *this  = *this * val;
+}
+
+template<uint64_t pers>
+MyDouble<pers> MyDouble<pers>::normalize(uint64_t x, int32_t exp) {
+  MyDouble res;
+  res.exp = exp;
+  if(x == 0) {
+    res.exp = std::numeric_limits<int32_t>::min();
+    return res;
+  }
+  uint64_t upper_bit = 1ull << 63;
+  int32_t shift = 1;
+  while(!(upper_bit & x)){
+    x <<= 1ull;
+    ++shift;
+  }
+  x <<= 1;
+  res.exp += 64 - shift;
+  res.signif[0] = static_cast<uint32_t>(x >> 32ull);
+  if(res.signif.size() > 1)
+    res.signif[1] = static_cast<uint32_t>(x);
+  return res;
+}
 
 #endif //MPI_MYDOUBLE_HPP
