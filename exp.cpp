@@ -18,8 +18,7 @@ template<uint64_t pers>
 MyDouble<pers> fact(uint n){
   MyDouble<pers> r;
   for(uint i = 1; i <= n; ++i){
-    MyDouble<pers>t(i);
-    r *= t;
+    r *= MyDouble<pers>(i);
   }
   return r;
 }
@@ -31,6 +30,7 @@ int main(int argc, char *argv[]) {
   //cout << MyDouble<64>::normalize(0).bin() <<" "<< MyDouble<64>::normalize(1025).bin()
   //     <<" " << MyDouble<64>::normalize(1025).dec() << " " << MyDouble<64>::normalize(1025, -4).dec() << "\n";
   cout <<"77! = "<< fact<380>(77).dec() <<"\n";
+  cout << (MyDouble<32>(0.98765)/MyDouble<32>(1.23456e-7)).dec();
   MPI::Finalize();
   return 0;
 }

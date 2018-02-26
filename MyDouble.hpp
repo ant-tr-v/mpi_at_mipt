@@ -29,11 +29,11 @@ class MyDouble {
   static const int64_t exp_bits = 12;
   static const uint64_t normalcoef = 0x7FF/2;
 
-  void dec_mul(std::vector<uint32_t>& num, uint32_t v);
+  static void dec_mul(std::vector<uint32_t>& num, uint32_t v);
 
-  void dec_add(std::vector<uint32_t>& a, const std::vector<uint32_t>& b);
+  static void dec_add(std::vector<uint32_t>& a, const std::vector<uint32_t>& b);
 
-  void for_bit(const std::function<void (int, size_t)> &func);
+  void for_bit(const std::function<void (int, size_t)> &func) const;
 
   void shift_right(uint64_t shift, bool add_one = true);
 
@@ -58,21 +58,34 @@ public:
     return stream << n.exp;
   }
 
-  MyDouble operator + (MyDouble &val);
+  MyDouble operator + (MyDouble const &val) const;
 
-  void operator += (MyDouble &val);
+  void operator += (MyDouble const &val);
 
-  MyDouble operator * (MyDouble &val);
+  MyDouble operator * (MyDouble const &val) const;
 
-  void operator *= (MyDouble &val);
+  void operator *= (MyDouble const &val);
 
-  std::string bin();
-  std::string dec();
+  MyDouble operator / (MyDouble const &val) const;
+
+  void operator /= (MyDouble const &val);
+
+  bool operator == (MyDouble const &val) const;
+
+  bool operator != (MyDouble const &val) const {return !(*this == val);}
+
+  bool operator < (MyDouble const &val) const;
+
+  template<uint64_t persV>
+  friend MyDouble<persV> average(MyDouble<persV> const &a, MyDouble<persV> const &b);
+
+  std::string bin() const;
+  std::string dec() const ;
 };
 
 
 template<uint64_t pers>
-std::string MyDouble<pers>::bin() {
+std::string MyDouble<pers>::bin() const{
   auto res = std::string();
   res.resize(pers + 2);
   res[0] ='1', res[1] = '.';
@@ -85,7 +98,7 @@ std::string MyDouble<pers>::bin() {
 }
 
 template<uint64_t pers>
-std::string MyDouble<pers>::dec() {
+std::string MyDouble<pers>::dec() const{
   std::vector <uint32_t> five{5};
   std::vector <uint32_t> integ{0};
   std::vector <uint32_t> fract{1};
@@ -196,7 +209,7 @@ void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
 }
 
 template<uint64_t pers>
-void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) {
+void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) const {
   uint64_t left = pers;
   uint64_t i = 0;
   for (i = 0; i < pers / 32; ++i, left -= 32){
@@ -242,9 +255,9 @@ void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
 }
 
 template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::operator+(MyDouble &val) {
+MyDouble<pers> MyDouble<pers>::operator+(MyDouble const &val) const {
   MyDouble<pers> res;
-  std::reference_wrapper<MyDouble<pers>> a = *this, b = val;
+  std::reference_wrapper<const MyDouble<pers>> a = *this, b = val;
   if(b.get().exp > a.get().exp)
     std::swap(a, b);
   int32_t shift = a.get().exp - b.get().exp;
@@ -270,12 +283,12 @@ MyDouble<pers> MyDouble<pers>::operator+(MyDouble &val) {
 }
 
 template<uint64_t pers>
-void MyDouble<pers>::operator+=(MyDouble &val) {
+void MyDouble<pers>::operator+=(MyDouble const &val) {
   *this  = *this + val;
 }
 
 template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::operator*(MyDouble &val) {
+MyDouble<pers> MyDouble<pers>::operator*(MyDouble const &val) const {
   MyDouble<pers> res = *this;
   res.exp = exp + val.exp;
   auto e = res.exp;
@@ -297,7 +310,7 @@ MyDouble<pers> MyDouble<pers>::operator*(MyDouble &val) {
 }
 
 template<uint64_t pers>
-void MyDouble<pers>::operator*=(MyDouble &val) {
+void MyDouble<pers>::operator*=(MyDouble const &val) {
   *this  = *this * val;
 }
 
@@ -322,5 +335,62 @@ MyDouble<pers> MyDouble<pers>::normalize(uint64_t x, int32_t exp) {
     res.signif[1] = static_cast<uint32_t>(x);
   return res;
 }
+
+template<uint64_t pers>
+MyDouble<pers> MyDouble<pers>::operator/(MyDouble const &val) const {
+  MyDouble<pers> a = *this, b = val, l(0.5), r(2), m, t;
+  a.exp = b.exp = 0;
+  m = average(l, r);
+  for(uint64_t i = 0; i < pers + 1; ++i){
+    t = m * b;
+    if (a < t){
+      r = m;
+    }else{
+      l = m;
+    }
+    m = average(l, r);
+  }
+  m.exp += exp - val.exp ;
+  return m;
+}
+
+template<uint64_t pers>
+void MyDouble<pers>::operator/=(MyDouble const &val) {
+  *this = *this / val;
+}
+
+template<uint64_t pers>
+bool MyDouble<pers>::operator==(MyDouble const &val) const {
+  if(exp != val.exp)
+    return false;
+  for(uint i = 0; i < signif.size(); ++i){
+    if(signif[i] != val.signif[i])
+      return false;
+  }
+  return true;
+}
+
+template<uint64_t pers>
+bool MyDouble<pers>::operator<(MyDouble const &val) const {
+  if(exp > val.exp)
+    return false;
+  if(exp < val.exp)
+    return true;
+  for(uint i = 0; i < signif.size(); ++i){
+    if(signif[i] > val.signif[i])
+      return false;
+    if(signif[i] < val.signif[i])
+      return true;
+  }
+  return false;
+}
+
+template<uint64_t pers>
+MyDouble<pers> average(MyDouble<pers> const &a, MyDouble<pers> const &b) {
+  MyDouble<pers> c = a + b;
+  c.exp--;
+  return c;
+}
+
 
 #endif //MPI_MYDOUBLE_HPP
