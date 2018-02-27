@@ -14,7 +14,7 @@
 #include <sstream>
 #include <iomanip>
 
-template <uint64_t pers>
+template <uint64_t prec>
 class MyDouble {
   //positive only
   //subtraction is not implemented
@@ -42,16 +42,36 @@ public:
   static MyDouble normalize(uint64_t x, int32_t exp = 0);
 
   MyDouble(){
-    signif.resize(std::max((pers + 31)/32, static_cast<uint64_t>(2)), 0);
+    signif.resize(std::max((prec + 31)/32, static_cast<uint64_t>(2)), 0);
   };
 
   explicit MyDouble(double x){
-    signif.resize(std::max((pers + 31)/32, static_cast<uint64_t>(2)), 0);
+    if(x == 0.){
+      *this = normalize(0);
+      return;
+    }
+    signif.resize(std::max((prec + 31)/32, static_cast<uint64_t>(2)), 0);
     auto p = reinterpret_cast<uint64_t *>(&x);
     exp = static_cast<int32_t>(((*p & exp_mask) >> frac_bits) - normalcoef);
     uint64_t significant = (*p & signif_mask) << exp_bits;
     signif[0] = static_cast <uint32_t>(significant >> 32);
     signif[1] = static_cast <uint32_t>(significant);
+  }
+
+  MyDouble(int32_t exp, size_t data_size, uint32_t * data_ptr):exp(exp){
+    signif = std::vector<uint32_t>(data_ptr, data_ptr + data_size);
+  }
+
+  size_t size(){
+    return signif.size();
+  }
+
+  int32_t exponent(){
+    return exp;
+  }
+
+  uint32_t *data(){
+    return signif.data();
   }
 
   friend std::ostream& operator << (std::ostream& stream, MyDouble n){
@@ -76,18 +96,18 @@ public:
 
   bool operator < (MyDouble const &val) const;
 
-  template<uint64_t persV>
-  friend MyDouble<persV> average(MyDouble<persV> const &a, MyDouble<persV> const &b);
+  template<uint64_t precV>
+  friend MyDouble<precV> average(MyDouble<precV> const &a, MyDouble<precV> const &b);
 
   std::string bin() const;
   std::string dec() const ;
 };
 
 
-template<uint64_t pers>
-std::string MyDouble<pers>::bin() const{
+template<uint64_t prec>
+std::string MyDouble<prec>::bin() const{
   auto res = std::string();
-  res.resize(pers + 2);
+  res.resize(prec + 2);
   res[0] ='1', res[1] = '.';
   auto f = [&res](int x, size_t ind) mutable {
     res[ind + 2] = static_cast<char>('0' + x);
@@ -97,8 +117,11 @@ std::string MyDouble<pers>::bin() const{
   return res;
 }
 
-template<uint64_t pers>
-std::string MyDouble<pers>::dec() const{
+template<uint64_t prec>
+std::string MyDouble<prec>::dec() const{
+  if(*this == normalize(0)){
+    return "0";
+  }
   std::vector <uint32_t> five{5};
   std::vector <uint32_t> integ{0};
   std::vector <uint32_t> fract{1};
@@ -158,7 +181,7 @@ std::string MyDouble<pers>::dec() const{
   std::string frstr = stream.str();
   frstr[0] = '.';
 
-  auto digits = static_cast<unsigned long>(log10l(2) * pers) + 2;
+  auto digits = static_cast<unsigned long>(log10l(2) * prec) + 2;
   if(digits <= res.size()) {
     if(digits < res.size()){
       auto len = res.size() - digits;
@@ -173,8 +196,8 @@ std::string MyDouble<pers>::dec() const{
   return res + frstr;
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::dec_mul(std::vector<uint32_t> &num, uint32_t v) {
+template<uint64_t prec>
+void MyDouble<prec>::dec_mul(std::vector<uint32_t> &num, uint32_t v) {
   //v must be < 10**9
   std::vector<uint32_t> res(num.size(), 0);
   uint32_t carr = 0;
@@ -188,8 +211,8 @@ void MyDouble<pers>::dec_mul(std::vector<uint32_t> &num, uint32_t v) {
   num = res;
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
+template<uint64_t prec>
+void MyDouble<prec>::dec_add(std::vector<uint32_t> &a,
                              const std::vector<uint32_t> &b) {
   uint32_t carr = 0;
   if(a.size() < b.size()) {
@@ -208,11 +231,11 @@ void MyDouble<pers>::dec_add(std::vector<uint32_t> &a,
     a.push_back(carr);
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) const {
-  uint64_t left = pers;
+template<uint64_t prec>
+void MyDouble<prec>::for_bit(const std::function<void(int, size_t)> &func) const {
+  uint64_t left = prec;
   uint64_t i = 0;
-  for (i = 0; i < pers / 32; ++i, left -= 32){
+  for (i = 0; i < prec / 32; ++i, left -= 32){
     for(uint j = 0; j < 32; ++j){
       func((signif[i]  & (1ULL << (31 - j))) != 0, i * 32 + j);
     }
@@ -222,8 +245,8 @@ void MyDouble<pers>::for_bit(const std::function<void(int, size_t)> &func) const
   }
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
+template<uint64_t prec>
+void MyDouble<prec>::shift_right(uint64_t shift, bool add_one) {
   if(shift == 0)
     return;
   int64_t small = shift % 32;
@@ -254,10 +277,10 @@ void MyDouble<pers>::shift_right(uint64_t shift, bool add_one) {
   }
 }
 
-template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::operator+(MyDouble const &val) const {
-  MyDouble<pers> res;
-  std::reference_wrapper<const MyDouble<pers>> a = *this, b = val;
+template<uint64_t prec>
+MyDouble<prec> MyDouble<prec>::operator+(MyDouble const &val) const {
+  MyDouble<prec> res;
+  std::reference_wrapper<const MyDouble<prec>> a = *this, b = val;
   if(b.get().exp > a.get().exp)
     std::swap(a, b);
   int32_t shift = a.get().exp - b.get().exp;
@@ -282,20 +305,20 @@ MyDouble<pers> MyDouble<pers>::operator+(MyDouble const &val) const {
   return res;
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::operator+=(MyDouble const &val) {
+template<uint64_t prec>
+void MyDouble<prec>::operator+=(MyDouble const &val) {
   *this  = *this + val;
 }
 
-template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::operator*(MyDouble const &val) const {
-  MyDouble<pers> res = *this;
+template<uint64_t prec>
+MyDouble<prec> MyDouble<prec>::operator*(MyDouble const &val) const {
+  MyDouble<prec> res = *this;
   res.exp = exp + val.exp;
   auto e = res.exp;
   for(auto i = static_cast<int>(val.signif.size() - 1); i >= 0; --i) {
     if(val.signif[i] == 0)
       continue;
-    MyDouble<pers> s1 = normalize(val.signif[i], -32 *(i + 1) + e); //part sum = a[i]* b
+    MyDouble<prec> s1 = normalize(val.signif[i], -32 *(i + 1) + e); //part sum = a[i]* b
     //std::cout <<"------" << i << " " << s1.dec() << "\n";
     for(auto j = static_cast<int>(signif.size() - 1); j >= 0; --j) {
       uint64_t r = 1ull * val.signif[i] * signif[j];
@@ -309,13 +332,13 @@ MyDouble<pers> MyDouble<pers>::operator*(MyDouble const &val) const {
   return res;
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::operator*=(MyDouble const &val) {
+template<uint64_t prec>
+void MyDouble<prec>::operator*=(MyDouble const &val) {
   *this  = *this * val;
 }
 
-template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::normalize(uint64_t x, int32_t exp) {
+template<uint64_t prec>
+MyDouble<prec> MyDouble<prec>::normalize(uint64_t x, int32_t exp) {
   MyDouble res;
   res.exp = exp;
   if(x == 0) {
@@ -336,12 +359,12 @@ MyDouble<pers> MyDouble<pers>::normalize(uint64_t x, int32_t exp) {
   return res;
 }
 
-template<uint64_t pers>
-MyDouble<pers> MyDouble<pers>::operator/(MyDouble const &val) const {
-  MyDouble<pers> a = *this, b = val, l(0.5), r(2), m, t;
+template<uint64_t prec>
+MyDouble<prec> MyDouble<prec>::operator/(MyDouble const &val) const {
+  MyDouble<prec> a = *this, b = val, l(0.5), r(2), m, t;
   a.exp = b.exp = 0;
   m = average(l, r);
-  for(uint64_t i = 0; i < pers + 1; ++i){
+  for(uint64_t i = 0; i < prec + 2; ++i){
     t = m * b;
     if (a < t){
       r = m;
@@ -354,13 +377,13 @@ MyDouble<pers> MyDouble<pers>::operator/(MyDouble const &val) const {
   return m;
 }
 
-template<uint64_t pers>
-void MyDouble<pers>::operator/=(MyDouble const &val) {
+template<uint64_t prec>
+void MyDouble<prec>::operator/=(MyDouble const &val) {
   *this = *this / val;
 }
 
-template<uint64_t pers>
-bool MyDouble<pers>::operator==(MyDouble const &val) const {
+template<uint64_t prec>
+bool MyDouble<prec>::operator==(MyDouble const &val) const {
   if(exp != val.exp)
     return false;
   for(uint i = 0; i < signif.size(); ++i){
@@ -370,8 +393,8 @@ bool MyDouble<pers>::operator==(MyDouble const &val) const {
   return true;
 }
 
-template<uint64_t pers>
-bool MyDouble<pers>::operator<(MyDouble const &val) const {
+template<uint64_t prec>
+bool MyDouble<prec>::operator<(MyDouble const &val) const {
   if(exp > val.exp)
     return false;
   if(exp < val.exp)
@@ -385,9 +408,9 @@ bool MyDouble<pers>::operator<(MyDouble const &val) const {
   return false;
 }
 
-template<uint64_t pers>
-MyDouble<pers> average(MyDouble<pers> const &a, MyDouble<pers> const &b) {
-  MyDouble<pers> c = a + b;
+template<uint64_t prec>
+MyDouble<prec> average(MyDouble<prec> const &a, MyDouble<prec> const &b) {
+  MyDouble<prec> c = a + b;
   c.exp--;
   return c;
 }
