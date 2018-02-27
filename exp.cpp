@@ -25,10 +25,6 @@ MyDouble<prec> fact(uint n){
   return r;
 }
 
-inline uint64_t find_prec(long long digits){
-  return static_cast<uint64_t>((10*digits + 2)/3); // 1/lg(2) ~= 3.32192809 ~= 10 / 3
-}
-
 template<uint64_t prec>
 void count(long long int from, long long int num, MyDouble<prec> x, MyDouble<prec> *res, MyDouble<prec> *final){
   if(from == 0) {
@@ -45,11 +41,6 @@ void count(long long int from, long long int num, MyDouble<prec> x, MyDouble<pre
 
 int main(int argc, char *argv[]) {
   MPI::Init(argc, argv);
-  //cout << "F(200) = " << fibonacci<110>(150).dec() <<"\n";
-  //cout << MyDouble<64>::normalize(0).bin() <<" "<< MyDouble<64>::normalize(1025).bin()
-  //     <<" " << MyDouble<64>::normalize(1025).dec() << " " << MyDouble<64>::normalize(1025, -4).dec() << "\n";
-  //cout <<"77! = "<< fact<380>(77).dec() <<"\n";
-  //cout << (MyDouble<32>(0.98765)/MyDouble<32>(1.23456e-7)).dec();
 
   auto time = std::chrono::high_resolution_clock::now();
   if (argc <= 1) {
