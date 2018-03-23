@@ -2,7 +2,7 @@
 #include <mpi/mpi.h>
 #include <chrono>
 #include "MyDouble.hpp"
-#define PREC 134
+#define PREC 367
 using namespace std;
 
 template<uint64_t prec>
@@ -26,7 +26,7 @@ MyDouble<prec> fact(uint n){
 }
 
 inline uint64_t find_prec(long long digits){
-  return static_cast<uint64_t>((10*digits + 2)/3); // 1/lg(2) ~= 3.32192809 ~= 10 / 3
+  return static_cast<uint64_t>((10*digits + 2)/3); // 1/log(2) ~= 3.32192809 ~= 10 / 3
 }
 
 template<uint64_t prec>
@@ -41,6 +41,23 @@ void count(long long int from, long long int num, MyDouble<prec> x, MyDouble<pre
     *final *= x / MyDouble<prec>(from + i);
     *res += *final;
   }
+}
+
+inline int findN(double loge, double x){
+  int l = 1, r = 1000000000;
+  while(r - l > 1){
+    int m = (l + r)/2;
+    double res = (m+ 2)*log10(x) - ((m + 0.5)*log10(m + 1));
+    //std:: cout << res <<" |" << m  <<" |" << loge <<" "<< (res < loge) <<std::endl;
+    if(res > loge){
+      l = m;
+    }else{
+      r = m;
+    }
+  }
+  if (r > 100)
+    return 5*r/4;
+  return 2*r;
 }
 
 int main(int argc, char *argv[]) {
@@ -58,17 +75,20 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   int N = 0;
+  double loge;
   double x =  0;
   int p = MPI::COMM_WORLD.Get_size();
   int rank = MPI::COMM_WORLD.Get_rank();
   try {
     x = std::stod(argv[1]);
-    N = std::stoi(argv[2]);
+    loge = std::stod(argv[2]);
   }catch(...){
-    std::cerr << "Final number should be positive integer";
+    std::cerr << "Input error";
     MPI::Finalize();
     return -1;
   }
+  N = findN(loge, x);
+  //std::cout << N << std::endl;
   bool rev = (x < 0);
   x = std::abs(x);
 

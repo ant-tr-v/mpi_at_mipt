@@ -174,7 +174,7 @@ std::string MyDouble<prec>::dec() const{
   p = fract.data() + fract.size() - 1;
   stream << *p;
   for(--p ;p >= fract.data(); --p){
-    stream << std::setw(9) << std::setfill('0') << *p;
+    stream << std::setw(9) << std::setfill('0') << *p;;
   }
 
 
@@ -318,16 +318,14 @@ MyDouble<prec> MyDouble<prec>::operator*(MyDouble const &val) const {
   for(auto i = static_cast<int>(val.signif.size() - 1); i >= 0; --i) {
     if(val.signif[i] == 0)
       continue;
-    MyDouble<prec> s1 = normalize(val.signif[i], -32 *(i + 1) + e); //part sum = a[i]* b
     //std::cout <<"------" << i << " " << s1.dec() << "\n";
-    for(auto j = static_cast<int>(signif.size() - 1); j >= 0; --j) {
+    for(auto j = static_cast<int>(signif.size() - i - 1); j >= 0; --j) {
       uint64_t r = 1ull * val.signif[i] * signif[j];
       if(r == 0)
         continue;
-      auto t = normalize(r, -32*(i + j + 2) + e);
-      s1 += t;
+      res += normalize(r, -32*(i + j + 2) + e);
     }
-    res += s1;
+    res += normalize(val.signif[i], -32 *(i + 1) + e);
   }
   return res;
 }
