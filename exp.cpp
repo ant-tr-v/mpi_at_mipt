@@ -1,5 +1,5 @@
 #include <iostream>
-#include <mpi/mpi.h>
+#include <boost/mpi.hpp>
 #include <chrono>
 #include "MyDouble.hpp"
 #define PREC 134
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
   //We represent exponent as e = 1 + x + ... x^n/n! * ( x/(n + 1) + ... x^(m - n)*n!/m! * ( ...))
   count<PREC>(rank*(N / p) + std::min(rank, N % p), k, MyDouble<PREC>(x), &res, &final);
 
-  int size = static_cast<int>(res.size());
+  auto size = static_cast<int>(res.size());
   int32_t exp;
 
   if(rank != p - 1){

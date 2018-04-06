@@ -1,5 +1,5 @@
 #include <iostream>
-#include <mpi/mpi.h>
+#include <boost/mpi.hpp>
 
 int main(int argc, char *argv[]) {
   MPI::Init(argc, argv);
